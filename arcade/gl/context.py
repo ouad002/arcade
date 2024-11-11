@@ -30,6 +30,7 @@ from .framebuffer import DefaultFrameBuffer, Framebuffer
 from .glsl import ShaderSource
 from .program import Program
 from .query import Query
+from .sampler import Sampler
 from .texture import Texture2D
 from .types import BufferDescription, GLenumLike, PyGLenum
 from .vertex_array import Geometry
@@ -1083,6 +1084,16 @@ class Context:
                 supporting the buffer protocol.
         """
         return Texture2D(self, size, data=data, depth=True)
+
+    def sampler(self, texture: Texture2D) -> Sampler:
+        """
+        Create a sampler object for a texture.
+
+        Args:
+            texture:
+                The texture to create a sampler for
+        """
+        return Sampler(self, texture)
 
     def geometry(
         self,
