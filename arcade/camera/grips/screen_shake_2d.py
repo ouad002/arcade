@@ -40,6 +40,9 @@ class ScreenShake2D:
         shake_frequency:
             The number of peaks per second. Avoid making it a multiple of half
             the target frame-rate. (e.g. at 60 fps avoid 30, 60, 90, 120, etc.)
+        direction_deg:
+            Optional direction in degrees for the screen shake. If not provided,
+            random directions will be used.
     """
 
     def __init__(
@@ -50,6 +53,7 @@ class ScreenShake2D:
         falloff_time: float = 1.0,
         acceleration_duration: float = 1.0,
         shake_frequency: float = 15.0,
+        direction_deg: float = None,
     ):
         self._data: CameraData = camera_data
 
@@ -76,6 +80,8 @@ class ScreenShake2D:
         self._current_dir: float = 0.0
         self._last_vector: tuple[float, float, float] = (0.0, 0.0, 0.0)
         self._last_update_time: float = 0.0
+
+        self.direction_deg = direction_deg  # New argument for constant direction
 
     @property
     def shaking(self) -> bool:
@@ -241,67 +247,50 @@ class ScreenShake2D:
         )
 
         self.reset()
-        self._shaking = False
-
-    def update(self, delta_time: float) -> None:
+        
+    def stop(self) -> None:
         """
-        Update the time, and decide if the shaking should stop.
-        Does not actually set the camera position.
-        Should not be called more than once an update cycle.
-
-        Args:
-            delta_time:
-                the length of time in seconds between update calls. Generally pass
-                in the delta_time provided by the arcade.Window's on_update method.
-        """
-        if not self._shaking:
-            return
-
-        self._length_shaking += delta_time
-
-        if self.falloff_duration > 0.0 and self._length_shaking >= self.duration:
-            self.stop()
-
-    def update_camera(self) -> None:
-        """
-        Update the position of the camera. Call this just before using the camera.
-        because the controller is modifying the PoD directly it stores the last
-        offset and resets the camera's position before adding the next offset.
-        """
-        if not self._shaking:
-            return
-
-        if (
-            floor(self._last_update_time * 2 * self.shake_frequency)
-            < floor(self._length_shaking * 2.0 * self.shake_frequency)
-        ) or self._last_update_time == 0.0:
-            self._current_dir = uniform(-180, 180)
-
-        _amp = self._calc_amplitude() * self.max_amplitude
-        _vec = quaternion_rotation(self._data.forward, self._data.up, self._current_dir)
-
-        _last = self._last_vector
-        _pos = self._data.position
-
-        self._data.position = (
-            _pos[0] - _last[0] + _vec[0] * _amp,
-            _pos[1] - _last[1] + _vec[1] * _amp,
-            _pos[2] - _last[2] + _vec[2] * _amp,
-        )
-
-        self._last_vector = (_vec[0] * _amp, _vec[1] * _amp, _vec[2] * _amp)
-        self._last_update_time = self._length_shaking
-
-    def readjust_camera(self) -> None:
-        """
-        Can be called after the camera has been used revert the screen_shake.
-        While not strictly necessary it is highly advisable. If you are moving the
-        camera using an animation or something similar the behavior can start to go
-        awry if you do not readjust after the screen shake.
+        Instantly stop the screen-shake.
         """
         self._data.position = (
             self._data.position[0] - self._last_vector[0],
             self._data.position[1] - self._last_vector[1],
             self._data.position[2] - self._last_vector[2],
         )
-        self._last_vector = (0.0, 0.0, 0.0)
+
+        self.reset()
+        self._shaking = False
+
+    def update(self, delta_time: float) -> None:
+        """
+        Update the screen-shake. Should be called every frame.
+
+        Args:
+            delta_time: The time since the last frame.
+        """
+        if not self._shaking:
+            return
+
+        self._length_shaking += delta_time
+        amplitude = self._calc_amplitude()
+
+        if self.direction_deg is None:
+            # Use random directions if no direction is set
+            angle_radians = uniform(0, 2 * pi)
+        else:
+            # Convert direction_deg to radians and use it
+            angle_radians = self.direction_deg * (pi / 180)
+
+        offset_x = amplitude * sin(angle_radians)
+        offset_y = amplitude * sin(angle_radians + pi / 2)
+
+        self._data.position = (
+            self._data.position[0] - self._last_vector[0] + offset_x,
+            self._data.position[1] - self._last_vector[1] + offset_y,
+            self._data.position[2] - self._last_vector[2],
+        )
+
+        self._last_vector = (offset_x, offset_y, 0.0)
+
+        if self._length_shaking >= self.duration:
+            self.stop()
